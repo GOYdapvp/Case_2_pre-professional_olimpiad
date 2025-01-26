@@ -1,2 +1,2 @@
 # Case_2_pre-professional_olimpiad
-this is a project of case 2 on "предпрофессиональная олимпиада" (the one about QR codes)
+это проект по кейсу ноемр 2 предпроф. олимпиады "SmartFridge: QR Control & IoT Sync"
