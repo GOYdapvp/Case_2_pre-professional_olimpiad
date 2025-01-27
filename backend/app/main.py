@@ -1,3 +1,6 @@
+"""
+Основной файл (его и запускать)
+"""
 from fastapi import FastAPI
 from app.routers import products
 
