@@ -30,7 +30,6 @@ def get_all_products():
 def get_product_by_id(product_id):
     response = requests.get(f"{BASE_URL}{product_id}/")
     if response.status_code == 200:
-        print(f"Информация о продукте с ID {product_id}:")
         data1 = response.json()
         data1["comments"] = "Информация о продукте с ID " + str(product_id)
         return data1
