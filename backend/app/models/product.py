@@ -1,6 +1,18 @@
 from pydantic import BaseModel, validator
 from datetime import date
 
+"""
+ProductBase - список всех продуктов пользователя:
+name - название продукта
+product_type - тип продукта (хлеб/рыба/т.д.)
+manufacture_date - дата изготовления
+expiration_date - дата истечения срока годности
+quantity - количество
+nutritional_info - пищевая ценность
+unit - единица измерения
+"""
+
+
 class ProductBase(BaseModel):
     name: str
     product_type: str
@@ -16,6 +28,7 @@ class ProductBase(BaseModel):
         if manufacture_date and manufacture_date > expiration_date:
             raise ValueError("Дата производства не может быть позже срока годности")
         return expiration_date
+
 
 class Product(ProductBase):
     id: int
