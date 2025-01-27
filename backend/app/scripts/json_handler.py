@@ -3,7 +3,8 @@ import json
 
 BASE_URL = "http://127.0.0.1:8000/products/"
 
-# Функция для добавления продуктов
+
+# Функция для добавления продуктов.
 def add_products(products):
     response = requests.post(BASE_URL, json=products)
     if response.status_code == 200:
@@ -12,6 +13,8 @@ def add_products(products):
     else:
         print(f"Ошибка при добавлении продуктов: {response.status_code} - {response.text}")
 
+
+# Функция для получения всех продуктов.
 def get_all_products():
     response = requests.get(BASE_URL)
     if response.status_code == 200:
@@ -22,6 +25,8 @@ def get_all_products():
     else:
         print(f"Ошибка при получении списка продуктов: {response.status_code} - {response.text}")
 
+
+# Функция для получения продукта по id.
 def get_product_by_id(product_id):
     response = requests.get(f"{BASE_URL}{product_id}/")
     if response.status_code == 200:
@@ -32,6 +37,8 @@ def get_product_by_id(product_id):
     else:
         print(f"Ошибка при получении продукта с ID {product_id}: {response.status_code} - {response.text}")
 
+
+# Функция для чтения из файла (util).
 def read_products_from_file(filename):
     try:
         with open(filename, 'r', encoding='utf-8') as file:
@@ -45,6 +52,7 @@ def read_products_from_file(filename):
         return []
 
 
+# Основная функция (по чтению\записи файлов json и обработке request-ов).
 if __name__ == "__main__":
     filename = "file.json"
     products_to_add = read_products_from_file(filename)
