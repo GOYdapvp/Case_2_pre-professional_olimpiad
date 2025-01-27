@@ -1,3 +1,7 @@
+"""
+Этот файл используется для распределения API.
+"""
+
 from fastapi import APIRouter, HTTPException
 from typing import List
 from app.models.product import Product, ProductBase
@@ -6,9 +10,10 @@ from datetime import datetime
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
+
 @router.get("/", response_model=List[Product])
 def get_all_products():
-    """Получить список всех продуктов."""
+    """Функция получения списка всех продуктов."""
     query = """
     SELECT main.id, main.name, product_types.name AS product_type, units.name AS unit,
            main.quantity, main.nutritional_info, main.manufacture_date, main.expiration_date
@@ -29,9 +34,10 @@ def get_all_products():
         if conn:
             conn.close()
 
+
 @router.post("/", response_model=List[Product])
 def add_products(products: List[ProductBase]):
-    """Добавить продукты."""
+    """Функция добавления продуктов."""
     get_type_query = "SELECT id FROM product_types WHERE name = %s;"
     get_unit_query = "SELECT id FROM units WHERE name = %s;"
     insert_query = """
