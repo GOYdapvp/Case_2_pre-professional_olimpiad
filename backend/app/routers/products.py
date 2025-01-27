@@ -78,3 +78,30 @@ def add_products(products: List[ProductBase]):
     finally:
         if conn:
             conn.close()
+
+
+@router.get("/{product_id}", response_model=Product)
+def get_product_by_id(product_id: int):
+    """Функция получения продуктов по ID."""
+    query = """
+    SELECT main.id, main.name, product_types.name AS product_type, units.name AS unit,
+           main.quantity, main.nutritional_info, main.manufacture_date, main.expiration_date
+    FROM main
+    JOIN product_types ON main.type_id = product_types.id
+    JOIN units ON main.unit_id = units.id
+    WHERE main.id = %s;
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(query, (product_id,))
+            product = cursor.fetchone()
+            if not product:
+                raise HTTPException(status_code=404, detail="Продукт с таким ID не найден")
+            return product
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
