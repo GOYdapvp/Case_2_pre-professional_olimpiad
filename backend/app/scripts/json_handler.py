@@ -54,7 +54,7 @@ def read_products_from_file(filename):
 
 # Основная функция (по чтению\записи файлов json и обработке request-ов).
 if __name__ == "__main__":
-    filename = "file.json"
+    filename = "scripts/file.json"
     products_to_add = read_products_from_file(filename)
 
     if products_to_add:
