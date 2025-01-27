@@ -1,3 +1,7 @@
+"""
+Подключение к базе данных.
+"""
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import HTTPException
