@@ -14,6 +14,7 @@ unit - единица измерения
 
 
 class ProductBase(BaseModel):
+    user_id: int
     name: str
     product_type: str
     manufacture_date: date
