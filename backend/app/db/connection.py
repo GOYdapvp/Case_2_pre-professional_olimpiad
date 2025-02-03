@@ -9,7 +9,7 @@ from fastapi import HTTPException
 DATABASE_CONFIG = {
     "dbname": "postgres",
     "user": "postgres",
-    "password": "12345",
+    "password": "wqfa9239",
     "host": "localhost",
     "port": 5432,
     "options":"-c client_encoding=UTF8"

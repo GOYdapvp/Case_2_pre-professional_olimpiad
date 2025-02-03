@@ -10,7 +10,6 @@ from app.db.connection import get_db_connection
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
-# В твоем маршруте get_all_products()
 @router.get("/", response_model=List[Product])
 def get_all_products(user_id: int = Query(..., description="ID пользователя")):
     """Функция получения списка всех продуктов для конкретного пользователя."""
@@ -29,7 +28,6 @@ def get_all_products(user_id: int = Query(..., description="ID пользова�
             cursor.execute(query, (user_id,))
             products = cursor.fetchall()
 
-            # Преобразуем кортежи в формат, который соответствует модели Product
             result = [
                 Product(
                     id=product["id"],
@@ -40,7 +38,7 @@ def get_all_products(user_id: int = Query(..., description="ID пользова�
                     nutritional_info=product["nutritional_info"],
                     manufacture_date=product["manufacture_date"],
                     expiration_date=product["expiration_date"],
-                    user_id=user_id  # Здесь добавляем user_id
+                    user_id=user_id
                 )
                 for product in products
             ]
