@@ -4,8 +4,8 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
-from app.models.product import Product, ProductBase
-from app.db.connection import get_db_connection
+from models.product import Product, ProductBase
+from db.connection import get_db_connection
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -122,4 +122,3 @@ def get_product_by_id(product_id: int, user_id: int = Query(..., description="ID
     finally:
         if conn:
             conn.close()
-
