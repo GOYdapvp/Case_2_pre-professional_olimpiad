@@ -3,8 +3,7 @@
 """
 from fastapi import FastAPI
 import uvicorn
-from app.routers import products, notifications
-
+from routers import products, notifications
 app = FastAPI()
 
 # Подключение роутеров
