@@ -1,3 +1,0 @@
-https://drive.google.com/drive/folders/1qZN8bkzzMYXKeE8LddIQyJMgMQ20FLBZ?usp=drive_link
-^
-это ссылка на АПК файл (т.к. GitHub не позволяет выложить файлы >25 МБ)
