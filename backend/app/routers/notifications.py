@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 from datetime import datetime, timedelta
 import time
-from app.db.connection import get_db_connection
+from db.connection import get_db_connection
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
