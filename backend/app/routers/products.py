@@ -2,47 +2,32 @@
 Этот файл используется для распределения API.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from typing import List
-from models.product import Product, ProductBase
-from db.connection import get_db_connection
+from app.models.product import Product, ProductBase
+from app.db.connection import get_db_connection
+from datetime import datetime
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @router.get("/", response_model=List[Product])
-def get_all_products(user_id: int = Query(..., description="ID пользователя")):
-    """Функция получения списка всех продуктов для конкретного пользователя."""
+def get_all_products():
+    """Функция получения списка всех продуктов."""
     query = """
     SELECT main.id, main.name, product_types.name AS product_type, units.name AS unit,
            main.quantity, main.nutritional_info, main.manufacture_date, main.expiration_date
     FROM main
     JOIN product_types ON main.type_id = product_types.id
-    JOIN units ON main.unit_id = units.id
-    WHERE main.user_id = %s;
+    JOIN units ON main.unit_id = units.id;
     """
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute(query, (user_id,))
+            cursor.execute(query)
             products = cursor.fetchall()
-
-            result = [
-                Product(
-                    id=product["id"],
-                    name=product["name"],
-                    product_type=product["product_type"],
-                    unit=product["unit"],
-                    quantity=product["quantity"],
-                    nutritional_info=product["nutritional_info"],
-                    manufacture_date=product["manufacture_date"],
-                    expiration_date=product["expiration_date"],
-                    user_id=user_id
-                )
-                for product in products
-            ]
-            return result
+            return products
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -50,17 +35,15 @@ def get_all_products(user_id: int = Query(..., description="ID пользова�
             conn.close()
 
 
-
-
 @router.post("/", response_model=List[Product])
 def add_products(products: List[ProductBase]):
-    """Функция добавления продуктов с user_id."""
+    """Функция добавления продуктов."""
     get_type_query = "SELECT id FROM product_types WHERE name = %s;"
     get_unit_query = "SELECT id FROM units WHERE name = %s;"
     insert_query = """
-    INSERT INTO main (user_id, name, type_id, manufacture_date, expiration_date, quantity, nutritional_info, unit_id)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    RETURNING id, user_id, name, manufacture_date, expiration_date, quantity, nutritional_info;
+    INSERT INTO main (name, type_id, manufacture_date, expiration_date, quantity, nutritional_info, unit_id)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    RETURNING id, name, manufacture_date, expiration_date, quantity, nutritional_info;
     """
     conn = None
     added_products = []
@@ -81,7 +64,7 @@ def add_products(products: List[ProductBase]):
                 unit_id = unit_result["id"]
 
                 cursor.execute(insert_query, (
-                    product.user_id, product.name, type_id, product.manufacture_date, product.expiration_date,
+                    product.name, type_id, product.manufacture_date, product.expiration_date,
                     product.quantity, product.nutritional_info, unit_id
                 ))
                 new_product = cursor.fetchone()
@@ -98,27 +81,28 @@ def add_products(products: List[ProductBase]):
 
 
 @router.get("/{product_id}", response_model=Product)
-def get_product_by_id(product_id: int, user_id: int = Query(..., description="ID пользователя")):
-    """Функция получения продукта по ID и user_id."""
+def get_product_by_id(product_id: int):
+    """Функция получения продуктов по ID."""
     query = """
-    SELECT main.id, main.user_id, main.name, product_types.name AS product_type, units.name AS unit,
+    SELECT main.id, main.name, product_types.name AS product_type, units.name AS unit,
            main.quantity, main.nutritional_info, main.manufacture_date, main.expiration_date
     FROM main
     JOIN product_types ON main.type_id = product_types.id
     JOIN units ON main.unit_id = units.id
-    WHERE main.id = %s AND main.user_id = %s;
+    WHERE main.id = %s;
     """
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute(query, (product_id, user_id))
+            cursor.execute(query, (product_id,))
             product = cursor.fetchone()
             if not product:
-                raise HTTPException(status_code=404, detail="Продукт с таким ID не найден или не принадлежит пользователю")
+                raise HTTPException(status_code=404, detail="Продукт с таким ID не найден")
             return product
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
             conn.close()
+

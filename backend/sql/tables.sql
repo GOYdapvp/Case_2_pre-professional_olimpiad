@@ -12,10 +12,9 @@ CREATE TABLE units (
     CONSTRAINT unique_unit_name UNIQUE (name)
 );
 
--- Основная таблица с привязкой к пользователю
+-- Основная таблица
 CREATE TABLE main (
     id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL,
     name VARCHAR(100) NOT NULL,
     type_id INT NOT NULL REFERENCES product_types(id) ON DELETE CASCADE,
     manufacture_date DATE NOT NULL,
@@ -25,6 +24,3 @@ CREATE TABLE main (
     unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
     CHECK (manufacture_date <= expiration_date)
 );
-
--- Индекс для быстрого поиска по user_id
-CREATE INDEX idx_main_user_id ON main(user_id);

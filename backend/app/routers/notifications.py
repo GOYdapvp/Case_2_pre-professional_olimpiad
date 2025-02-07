@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from datetime import datetime, timedelta
 import time
-from db.connection import get_db_connection
+from app.db.connection import get_db_connection
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 NOTIFY_DAYS = 3
 
 @router.get("/")
-def get_notifications(user_id: int = Query(..., description="ID пользователя")):
+def get_notifications():
     """Долгий HTTP-запрос, который ждет появления уведомлений."""
     timeout = 30
     start_time = time.time()
@@ -21,9 +21,9 @@ def get_notifications(user_id: int = Query(..., description="ID пользова
                 query = """
                 SELECT name, expiration_date
                 FROM main
-                WHERE user_id = %s AND expiration_date = %s;
+                WHERE expiration_date = %s;
                 """
-                cursor.execute(query, (user_id, today + timedelta(days=NOTIFY_DAYS)))
+                cursor.execute(query, (today + timedelta(days=NOTIFY_DAYS),))
                 products = cursor.fetchall()
 
                 if products:

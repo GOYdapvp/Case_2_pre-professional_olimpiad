@@ -2,7 +2,7 @@ from pydantic import BaseModel, validator
 from datetime import date
 
 """
-ProductBase - список всех продуктов пользователя:
+ProductBase - список всех продуктов:
 name - название продукта
 product_type - тип продукта (хлеб/рыба/т.д.)
 manufacture_date - дата изготовления
@@ -12,9 +12,7 @@ nutritional_info - пищевая ценность
 unit - единица измерения
 """
 
-
 class ProductBase(BaseModel):
-    user_id: int
     name: str
     product_type: str
     manufacture_date: date
@@ -30,7 +28,6 @@ class ProductBase(BaseModel):
             raise ValueError("Дата производства не может быть позже срока годности")
         return expiration_date
 
-
 class Product(ProductBase):
     id: int
 
@@ -38,3 +35,4 @@ class Product(ProductBase):
         json_encoders = {
             date: lambda v: v.strftime("%Y-%m-%d"),
         }
+

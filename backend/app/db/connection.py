@@ -9,10 +9,10 @@ from fastapi import HTTPException
 DATABASE_CONFIG = {
     "dbname": "postgres",
     "user": "postgres",
-    "password": "wqfa9239",
+    "password": "12345",
     "host": "localhost",
     "port": 5432,
-    "options":"-c client_encoding=UTF8"
+    "options": "-c client_encoding=UTF8"
 }
 
 def get_db_connection():
@@ -21,3 +21,4 @@ def get_db_connection():
         return conn
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка подключения к базе данных: {e}")
+
