@@ -7,7 +7,7 @@
 =======
 
 # Ссылка на видеоролик:
-https://rutube.ru/video/private/fbfb823beb132614240dda2963eb83c6/?p=u2Xi2cr0CVkTJAosEue9qw
+[https://rutube.ru/video/private/fbfb823beb132614240dda2963eb83c6/?p=u2Xi2cr0CVkTJAosEue9qw](https://rutube.ru/video/private/fbfb823beb132614240dda2963eb83c6/?p=u2Xi2cr0CVkTJAosEue9qw)
 
 # Примечание:
 "backend" будет использован в будущем для 2 версии. пока-что приложение локальное и не синхронизируется на всех устройствах.
