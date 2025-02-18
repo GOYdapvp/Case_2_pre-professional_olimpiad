@@ -8,6 +8,12 @@ import 'package:sqflite/sqflite.dart';
 class DatabaseHelper {
   static Database? _database;
 
+  Future<void> logout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    // Дополнительный код для выхода пользователя
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await initDatabase();
@@ -92,38 +98,6 @@ class DatabaseHelper {
       BEGIN
         INSERT INTO operation_history (action, product_name, timestamp, location)
         VALUES ('remove', OLD.name, DATETIME('now'), 'Основной список');
-      END
-    ''');
-
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS after_insert_shopping_list
-      AFTER INSERT ON shopping_list
-      BEGIN
-        INSERT INTO operation_history (action, product_name, timestamp, location)
-        VALUES ('add', NEW.name, DATETIME('now'), 'Список покупок');
-      END
-    ''');
-
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS after_delete_shopping_list
-      AFTER DELETE ON shopping_list
-      BEGIN
-        INSERT INTO operation_history (action, product_name, timestamp, location)
-        VALUES ('remove', OLD.name, DATETIME('now'), 'Список покупок');
-      END
-    ''');
-
-    await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS after_update_shopping_list
-      AFTER UPDATE ON shopping_list
-      BEGIN
-        INSERT INTO operation_history (action, product_name, timestamp, location)
-        VALUES (
-          CASE WHEN NEW.is_checked = 1 THEN 'check' ELSE 'uncheck' END,
-          NEW.name,
-          DATETIME('now'),
-          'Список покупок'
-        );
       END
     ''');
   }
@@ -249,10 +223,39 @@ class DatabaseHelper {
       return [];
     }
   }
-
   Future<int> deleteNotification(int id) async {
     Database db = await database;
     return await db.delete('notifications', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Product>> getExpiringProducts() async {
+    final db = await database;
+    final now = DateTime.now();
+    final threeDaysLater = now.add(Duration(days: 3));
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'products',
+      where: 'expirationday BETWEEN ? AND ?',
+      whereArgs: [now.toIso8601String(), threeDaysLater.toIso8601String()],
+    );
+
+    return List.generate(maps.length, (i) {
+      return Product.fromMap(maps[i]);
+    });
+  }
+  Future<List<Product>> getExpiredProducts() async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'products',
+      where: 'expirationday < ?',
+      whereArgs: [now],
+    );
+
+    return List.generate(maps.length, (i) {
+      return Product.fromMap(maps[i]);
+    });
   }
 
   Future<List<Map<String, dynamic>>> getAllTables() async {
@@ -269,9 +272,20 @@ class DatabaseHelper {
       return [];
     }
   }
+  Future<List<Product>> getExpiringSoonProducts() async {
+    final db = await database;
+    final now = DateTime.now();
+    final threshold = now.add(const Duration(days: 3));
 
+    final List<Map<String, dynamic>> maps = await db.query(
+      'products',
+      where: 'expirationday BETWEEN ? AND ?',
+      whereArgs: [now.toIso8601String(), threshold.toIso8601String()],
+    );
+
+    return List.generate(maps.length, (i) => Product.fromMap(maps[i]));
+  }
 }
-
 
 class Product {
   int? id;
@@ -330,50 +344,28 @@ class Department {
   final List<Product> products;
 
   Department({required this.name, required this.products});
-}
-
-class Notification {
-  int? id;
-  String title;
-  String message;
-  DateTime timestamp;
-  bool isRead;
-
-  Notification({
-    this.id,
-    required this.title,
-    required this.message,
-    required this.timestamp,
-    this.isRead = false,
-  });
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'title': title,
-      'message': message,
-      'timestamp': timestamp.toIso8601String(),
-      'isRead': isRead ? 1 : 0,
+      'name': name,
+      'products': products.map((product) => product.toMap()).toList(),
     };
   }
 
-  static Notification fromMap(Map<String, dynamic> map) {
-    return Notification(
-      id: map['id'],
-      title: map['title'],
-      message: map['message'],
-      timestamp: DateTime.parse(map['timestamp']),
-      isRead: map['isRead'] == 1,
+  static Department fromMap(Map<String, dynamic> map) {
+    return Department(
+      name: map['name'],
+      products: (map['products'] as List)
+          .map((productMap) => Product.fromMap(productMap))
+          .toList(),
     );
   }
 }
 
-
-
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(MyApp());
 }
-
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -398,21 +390,40 @@ class QRScannerPage extends StatefulWidget {
   @override
   _QRScannerPageState createState() => _QRScannerPageState();
 }
-
-class _QRScannerPageState extends State<QRScannerPage> {
+class _QRScannerPageState extends State<QRScannerPage> with WidgetsBindingObserver {
   List<Department> _departments = [];
   List<Product> _expiredProducts = []; // Список для хранения просроченных продуктов
   List<HistoryItem> _historyItems = [];
   String _searchQuery = ''; // Новое состояние для поискового запроса
   bool _isSearching = false; // Флаг для отслеживания состояния
+  Future<void> resetAppData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    setState(() {
+      _departments.clear();
+      _expiredProducts.clear();
+      _historyItems.clear();
+    });
+    _saveProducts();
 
+    // Очистка базы данных
+    DatabaseHelper dbHelper = DatabaseHelper();
+    await dbHelper.deleteAllProducts();
+    await dbHelper.clearHistory();
+    await dbHelper.clearShoppingList();
 
+    // Показать сообщение пользователю
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Все данные приложения очищены')),
+    );
+  }
   @override
   void initState() {
     super.initState();
     _loadProducts();
     _loadHistory();
-    //_checkExpirationDates();
+    _removeExpiredProducts();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   List<Product> _getFilteredProducts() {
@@ -452,7 +463,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
     List<String> historyJson = _historyItems.map((item) => jsonEncode(item.toMap())).toList();
     await prefs.setStringList('history', historyJson);
   }
-
   void _loadHistory() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String>? historyJson = prefs.getStringList('history');
@@ -467,16 +477,18 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   void _addProduct(Map<String, dynamic> productData) {
     setState(() {
+      // Найти отдел (Department) по типу продукта
       Department? department = _departments.firstWhere(
             (dept) => dept.name == productData['typ'],
         orElse: () {
+          // Если отдела нет, создаем новый
           var newDept = Department(name: productData['typ'], products: []);
           _departments.add(newDept);
           return newDept;
         },
       );
       int existingIndex = department.products.indexWhere((p) =>
-          p.name == productData['name'] &&
+      p.name == productData['name'] &&
           p.typ == productData['typ'] &&
           p.makeday == productData['makeday'] &&
           p.expirationday == productData['expirationday'] &&
@@ -484,8 +496,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
           p.nutritionalinfo == productData['nutritionalinfo'] &&
           p.typemeasure == productData['typemeasure']);
       if (existingIndex != -1) {
-        department.products[existingIndex].quantity = (department.products[existingIndex].quantity ?? 0) + 1;
+        // Если продукт уже существует, увеличиваем его количество
+        department.products[existingIndex].quantity =
+            (department.products[existingIndex].quantity ?? 0) + 1;
       } else {
+        // Если продукта нет, создаем новый
         Product newProduct = Product(
           name: productData['name'],
           typ: productData['typ'],
@@ -497,7 +512,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
           quantity: 1,
         );
         department.products.add(newProduct);
-
         dbHelper.insertProduct(newProduct);
 
         _addHistoryItem(HistoryItem(
@@ -506,75 +520,54 @@ class _QRScannerPageState extends State<QRScannerPage> {
           timestamp: DateTime.now(),
           location: 'Основной список',
         ));
-
         if (_getRemainingDays(newProduct.expirationday) == 'Просрочен') {
           _expiredProducts.add(newProduct);
         }
       }
     });
-    _removeExpiredProducts();
+    // Удаляем просроченные продукты
+    //_removeExpiredProducts();
+
+    // Сохраняем изменения в базе данных и SharedPreferences
     _saveProducts();
   }
-
-
-  void _deleteProduct(Product product, int departmentIndex) async {
+  void _deleteProduct(Product product, int departmentIndex) {
     setState(() {
       if (product.quantity > 1) {
-        // Если количество больше 1, уменьшаем на 1
         product.quantity--;
       } else {
-        // Если количество равно 1, удаляем продукт
         _departments[departmentIndex].products.remove(product);
         if (_departments[departmentIndex].products.isEmpty) {
           _departments.removeAt(departmentIndex);
         }
       }
-
-      // Добавляем запись об удалении в историю
-      _addHistoryItem(HistoryItem(
-        action: 'remove',
-        productName: product.name,
-        timestamp: DateTime.now(),
-        location: 'Основной список',
-      ));
     });
-
-    // Удаляем продукт из базы данных
-    await dbHelper.deleteProduct(product.id!);
-
-    // Сохраняем обновленный список продуктов
     _saveProducts();
+    _addHistoryItem(HistoryItem(
+      action: 'remove',
+      productName: product.name,
+      timestamp: DateTime.now(),
+      location: 'Основной список',
+    ));
   }
 
-
-  void _loadProducts() async {
-    final dbHelper = DatabaseHelper();
-    List<Product> products = await dbHelper.getProducts();
-    setState(() {
-      _departments.clear();
-      for (var product in products) {
-        Department department = _departments.firstWhere(
-              (dept) => dept.name == product.typ,
-          orElse: () {
-            var newDept = Department(name: product.typ, products: []);
-            _departments.add(newDept);
-            return newDept;
-          },
-        );
-        department.products.add(product);
-      }
-    });
-  }
-  void _saveProducts() async {
-    final dbHelper = DatabaseHelper();
-    await dbHelper.deleteAllProducts();
-    for (var department in _departments) {
-      for (var product in department.products) {
-        await dbHelper.insertProduct(product);
-      }
+  Future<void> _loadProducts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedProducts = prefs.getString('products');
+    if (savedProducts != null) {
+      final decodedProducts = jsonDecode(savedProducts) as List;
+      setState(() {
+        _departments = decodedProducts.map((deptMap) => Department.fromMap(deptMap)).toList();
+      });
     }
   }
-
+  Future<void> _saveProducts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encodedProducts = jsonEncode(_departments.map((dept) =>
+        dept.toMap()
+    ).toList());
+    await prefs.setString('products', encodedProducts);
+  }
 
   void _removeExpiredProducts() {
     for (var department in _departments) {
@@ -598,16 +591,20 @@ class _QRScannerPageState extends State<QRScannerPage> {
   String _getRemainingDays(String expirationDateStr) {
     DateTime expirationDate = DateTime.parse(expirationDateStr);
     DateTime now = DateTime.now();
-    int remainingDays = expirationDate.difference(now).inDays;
-
+    // Приводим текущую дату к началу дня
+    DateTime today = DateTime(now.year, now.month, now.day);
+    int remainingDays = expirationDate.difference(today).inDays;
     if (remainingDays < 0) {
       return 'Просрочен';
     } else if (remainingDays == 0) {
       return 'Истекает сегодня';
+    } else if (remainingDays == 1) {
+      return 'Истекает завтра';
     } else {
-      return '${remainingDays+1} дн.';
+      return '${remainingDays} дн.';
     }
   }
+
 
   void _addHistoryItem(HistoryItem item) {
     setState(() {
@@ -615,25 +612,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
     });
     _saveHistory();
   }
-
-  List<Product> _getExpiringProducts() {
-    List<Product> expiringProducts = [];
-    DateTime now = DateTime.now();
-
-    for (var department in _departments) {
-      for (var product in department.products) {
-        DateTime expirationDate = DateTime.parse(product.expirationday);
-        int daysUntilExpiration = expirationDate.difference(now).inDays;
-
-        if (daysUntilExpiration <= 1 && daysUntilExpiration >= 0) {
-          expiringProducts.add(product);
-        }
-      }
-    }
-
-    return expiringProducts;
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -697,6 +675,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                           color: _getRemainingDays(product.expirationday) == 'Просрочен'
                               ? Colors.red
                               : _getRemainingDays(product.expirationday) == 'Истекает сегодня'
+                              ? Colors.deepOrange
+                              : _getRemainingDays(product.expirationday) == 'Истекает завтра'
                               ? Colors.orange
                               : Colors.green,
                           fontWeight: FontWeight.bold,
@@ -705,7 +685,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
                     ],
                   ),
-                  subtitle: Text('${product.nutritionalinfo} ккал'),
+                  subtitle: Text('${product.weight}${product.typemeasure}'),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -768,7 +748,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
                 ),
               ],
             ),
-            subtitle: Text('${product.nutritionalinfo} ккал'),
+            subtitle: Text('${product.weight}${product.typemeasure}'),
             onTap: () {
               Navigator.push(
                 context,
@@ -812,29 +792,29 @@ class _QRScannerPageState extends State<QRScannerPage> {
               icon: Icon(Icons.history),
               onPressed: () {
                 Navigator.push(
+
                   context,
                   MaterialPageRoute(builder: (context) => HistoryPage(historyItems: _historyItems)),
                 );
               },
               tooltip: 'Аналитика',
             ),
-            IconButton(
-              icon: Icon(Icons.notifications),
-              onPressed: () {
-                List<Product> expiringProducts = _getExpiringProducts();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => NotificationsPage(expiringProducts: expiringProducts)),
-                );
-              },
-              tooltip: 'Уведомления',
-            ),
           ],
         ),
       ),
-      floatingActionButton: null, // Удаляем плавающую кнопку действия
-
     );
+  }
+  @override
+  void dispose() {
+    _saveProducts();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _saveProducts();
+    }
   }
 }
 
@@ -897,8 +877,6 @@ class ResultPage extends StatelessWidget {
     );
   }
 }
-
-
 class ProductDetailsPage extends StatelessWidget {
   final Product product;
   ProductDetailsPage({required this.product});
@@ -941,14 +919,16 @@ class ProductDetailsPage extends StatelessWidget {
 
 class ShoppingListPage extends StatefulWidget {
   final Function(HistoryItem) onHistoryItemAdded;
+
   ShoppingListPage({required this.onHistoryItemAdded});
+
   @override
   _ShoppingListPageState createState() => _ShoppingListPageState();
 }
-
 class _ShoppingListPageState extends State<ShoppingListPage> {
   List<ShoppingItem> shoppingList = [];
   TextEditingController _textFieldController = TextEditingController();
+  TextEditingController _quantityController = TextEditingController();
 
   @override
   void initState() {
@@ -958,12 +938,11 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
 
   void _loadShoppingList() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      List<String>? savedList = prefs.getStringList('shopping_list');
-      if (savedList != null) {
-        shoppingList = savedList.map((item) => ShoppingItem.fromMap(jsonDecode(item))).toList();
-      }
-    });
+    List<String>? savedList = prefs.getStringList('shopping_list');
+    if (savedList != null) {
+      shoppingList = savedList.map((item) => ShoppingItem.fromMap(jsonDecode(item))).toList();
+      setState(() {});
+    }
   }
 
   void _saveShoppingList() async {
@@ -972,25 +951,27 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
     await prefs.setStringList('shopping_list', saveList);
   }
 
-  void _addHistoryItem(HistoryItem item) {
-    setState(() {
-      widget.onHistoryItemAdded(item);
-    });
-    _saveShoppingList();
-  }
-
-  DatabaseHelper dbHelper = DatabaseHelper();
-
   void _addItem() {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: Text('Добавить в список покупок'),
-          content: TextField(
-            controller: _textFieldController,
-            decoration: InputDecoration(hintText: "Введите название продукта"),
-            autofocus: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _textFieldController,
+                decoration: InputDecoration(hintText: "Введите название продукта"),
+                autofocus: true,
+              ),
+              SizedBox(height: 8),
+              TextField(
+                controller: _quantityController,
+                decoration: InputDecoration(hintText: "Введите количество"),
+                keyboardType: TextInputType.number,
+              ),
+            ],
           ),
           actions: <Widget>[
             TextButton(
@@ -1004,17 +985,17 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
               onPressed: () {
                 setState(() {
                   if (_textFieldController.text.isNotEmpty) {
-                    shoppingList.add(ShoppingItem(name: _textFieldController.text));
-                    _addHistoryItem(HistoryItem(
-                      action: 'add',
-                      productName: _textFieldController.text,
-                      timestamp: DateTime.now(),
-                      location: 'Список покупок',
+                    int quantity = int.tryParse(_quantityController.text) ?? 1;
+                    shoppingList.add(ShoppingItem(
+                      name: _textFieldController.text,
+                      quantity: quantity,
                     ));
                     _textFieldController.clear();
+                    _quantityController.clear();
                   }
                 });
                 Navigator.of(context).pop();
+                _saveShoppingList();
               },
             ),
           ],
@@ -1050,21 +1031,15 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
             direction: DismissDirection.endToStart,
             onDismissed: (direction) {
               setState(() {
-                String removedItemName = shoppingList[index].name;
                 shoppingList.removeAt(index);
-                _addHistoryItem(HistoryItem(
-                  action: 'remove',
-                  productName: removedItemName,
-                  timestamp: DateTime.now(),
-                  location: 'Список покупок',
-                ));
+                _saveShoppingList();
               });
             },
             child: ListTile(
               title: Text(
-                shoppingList[index].name,
+                '${shoppingList[index].name} (${shoppingList[index].quantity})',
                 style: TextStyle(
-                  decoration: TextDecoration.none,
+                  decoration: shoppingList[index].isChecked ? TextDecoration.lineThrough : TextDecoration.none,
                 ),
               ),
               leading: GestureDetector(
@@ -1072,12 +1047,6 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
                   setState(() {
                     shoppingList[index].isChecked = !shoppingList[index].isChecked;
                     _saveShoppingList();
-                    widget.onHistoryItemAdded(HistoryItem(
-                      action: shoppingList[index].isChecked ? 'check' : 'uncheck',
-                      productName: shoppingList[index].name,
-                      timestamp: DateTime.now(),
-                      location: 'Список покупок',
-                    ));
                   });
                 },
                 child: Container(
@@ -1093,37 +1062,63 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
                       : null,
                 ),
               ),
-              onTap: () {
-                setState(() {
-                  shoppingList[index].isChecked = !shoppingList[index].isChecked;
-                  _addHistoryItem(HistoryItem(
-                    action: shoppingList[index].isChecked ? 'check' : 'uncheck',
-                    productName: shoppingList[index].name,
-                    timestamp: DateTime.now(),
-                    location: 'Список покупок',
-                  ));
-                });
-              },
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.remove),
+                    onPressed: () {
+                      setState(() {
+                        if (shoppingList[index].quantity > 1) {
+                          shoppingList[index].quantity--;
+                          _saveShoppingList();
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.add),
+                    onPressed: () {
+                      setState(() {
+                        shoppingList[index].quantity++;
+                        _saveShoppingList();
+                      });
+                    },
+                  ),
+                ],
+              ),
             ),
           );
         },
       ),
     );
   }
-}
 
+  @override
+  void dispose() {
+    _saveShoppingList();
+    super.dispose();
+  }
+}
 class ShoppingItem {
   int? id;
   String name;
   bool isChecked;
+  int quantity;
 
-  ShoppingItem({this.id, required this.name, this.isChecked = false});
+  ShoppingItem({
+    this.id,
+    required this.name,
+    this.isChecked = false,
+    this.quantity = 1,
+  });
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
       'isChecked': isChecked ? 1 : 0,
+      'quantity': quantity,
     };
   }
 
@@ -1132,10 +1127,10 @@ class ShoppingItem {
       id: map['id'],
       name: map['name'],
       isChecked: map['isChecked'] == 1,
+      quantity: map['quantity'] ?? 1,
     );
   }
 }
-
 
 
 class HistoryPage extends StatefulWidget {
@@ -1146,9 +1141,9 @@ class HistoryPage extends StatefulWidget {
   @override
   _HistoryPageState createState() => _HistoryPageState();
 }
-
 class _HistoryPageState extends State<HistoryPage> {
-  DateTime _selectedDate = DateTime.now();
+  DateTime _startDate = DateTime.now().subtract(Duration(days: 7));
+  DateTime _endDate = DateTime.now();
   List<HistoryItem> _filteredItems = [];
 
   @override
@@ -1160,23 +1155,23 @@ class _HistoryPageState extends State<HistoryPage> {
   void _filterItems() {
     setState(() {
       _filteredItems = widget.historyItems.where((item) =>
-      item.timestamp.year == _selectedDate.year &&
-          item.timestamp.month == _selectedDate.month &&
-          item.timestamp.day == _selectedDate.day
+      item.timestamp.isAfter(_startDate.subtract(Duration(days: 1))) &&
+          item.timestamp.isBefore(_endDate.add(Duration(days: 1)))
       ).toList();
     });
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _selectDateRange(BuildContext context) async {
+    DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      initialDate: _selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
     );
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null) {
       setState(() {
-        _selectedDate = picked;
+        _startDate = picked.start;
+        _endDate = picked.end;
         _filterItems();
       });
     }
@@ -1186,11 +1181,11 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('История действий'),
+        title: Text('Аналитика потребления'),
         actions: [
           IconButton(
-            icon: Icon(Icons.calendar_today),
-            onPressed: () => _selectDate(context),
+            icon: Icon(Icons.date_range),
+            onPressed: () => _selectDateRange(context),
           ),
         ],
       ),
@@ -1199,7 +1194,7 @@ class _HistoryPageState extends State<HistoryPage> {
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Text(
-              'Дата: ${DateFormat('dd.MM.yyyy').format(_selectedDate)}',
+              'Период: ${DateFormat('dd.MM.yyyy').format(_startDate)} - ${DateFormat('dd.MM.yyyy').format(_endDate)}',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
@@ -1214,8 +1209,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     color: item.action == 'add' ? Colors.green : Colors.red,
                   ),
                   title: Text(item.productName),
-                  subtitle: Text('${item.action == 'add' ? 'Добавлено' : 'Удалено'} ${DateFormat('HH:mm').format(item.timestamp)}'),
-                  trailing: Text(item.location),
+                  subtitle: Text('${item.action == 'add' ? 'Добавлено' : 'Удалено'} ${DateFormat('dd.MM.yyyy HH:mm').format(item.timestamp)}'),
                 );
               },
             ),
@@ -1225,7 +1219,6 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 }
-
 class HistoryItem {
   final String action;
   final String productName;
@@ -1257,79 +1250,3 @@ class HistoryItem {
     );
   }
 }
-
-
-class NotificationsPage extends StatelessWidget {
-  final List<Product> expiringProducts;
-
-  NotificationsPage({required this.expiringProducts});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Уведомления'),
-      ),
-      body: expiringProducts.isEmpty
-          ? Center(child: Text('Нет уведомлений', style: TextStyle(fontSize: 18)))
-          : ListView.builder(
-        itemCount: expiringProducts.length,
-        itemBuilder: (context, index) {
-          Product product = expiringProducts[index];
-          DateTime expirationDate = DateTime.parse(product.expirationday);
-          int daysUntilExpiration = expirationDate.difference(DateTime.now()).inDays;
-
-          String message;
-          Color cardColor;
-          IconData iconData;
-
-          if (daysUntilExpiration < 0) {
-            message = 'Продукт просрочен';
-            cardColor = Colors.red[100]!;
-            iconData = Icons.error_outline;
-          } else if (daysUntilExpiration == 0) {
-            message = 'Срок годности истекает сегодня';
-            cardColor = Colors.red[100]!;
-            iconData = Icons.warning_amber_rounded;
-          } else {
-            message = 'Срок годности истекает завтра';
-            cardColor = Colors.orange[100]!;
-            iconData = Icons.warning_amber_rounded;
-          }
-
-
-          return Card(
-            elevation: 4,
-            margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: cardColor,
-            child: ListTile(
-              contentPadding: EdgeInsets.all(16),
-              leading: Icon(iconData, size: 48, color: Colors.grey[800]),
-              title: Text(
-                product.name,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 8),
-                  Text(message, style: TextStyle(fontSize: 16)),
-                  SizedBox(height: 4),
-                  Text(
-                    'Срок годности: ${DateFormat('dd.MM.yyyy').format(expirationDate)}',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-
-
-
-
