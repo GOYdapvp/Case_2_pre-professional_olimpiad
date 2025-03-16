@@ -2,13 +2,11 @@ import requests
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Функция для получения одного тайла от сервиса
 def get_tile(service_url):
     response = requests.get(service_url)
     data = response.json()
     return data['data']
 
-# Функция для сбора всех тайлов
 def collect_tiles(service_url):
     tiles = {}
     while len(tiles) < 16:
