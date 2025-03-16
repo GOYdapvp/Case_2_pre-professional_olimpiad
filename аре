@@ -1,0 +1,116 @@
+import requests
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Функция для получения одного тайла от сервиса
+def get_tile(service_url):
+    response = requests.get(service_url)
+    data = response.json()
+    return data['data']
+
+# Функция для сбора всех тайлов
+def collect_tiles(service_url):
+    tiles = {}
+    while len(tiles) < 16:
+        tile = get_tile(service_url)
+        # Для упрощения предположим, что каждый тайл имеет уникальный идентификатор,
+        # который можно получить из ответа API. В реальности это может быть более сложно.
+        tile_id = hash(tuple(map(tuple, tile)))  # Простой способ идентификации
+        tiles[tile_id] = tile
+    return tiles
+
+# Функция для сборки полной карты
+def assemble_map(tiles):
+    # Для упрощения предположим, что тайлы можно расположить в сетке 4x4
+    map_size = 256
+    assembled_map = np.zeros((map_size, map_size), dtype=np.uint8)
+    
+    tile_size = 64
+    tile_ids = list(tiles.keys())
+    
+    # Расположение тайлов в сетке
+    for i in range(4):
+        for j in range(4):
+            tile_id = tile_ids[i*4 + j]
+            tile = tiles[tile_id]
+            assembled_map[i*tile_size:(i+1)*tile_size, j*tile_size:(j+1)*tile_size] = tile
+    
+    return assembled_map
+
+# Функция для поиска пиков возвышенностей
+from scipy.ndimage import maximum_filter
+
+def find_peaks(map_data):
+    max_filtered = maximum_filter(map_data, size=3, mode='nearest')
+    peaks = np.argwhere((map_data == max_filtered) & (map_data > 128))  # Примерный порог
+    return peaks
+
+# Функция для размещения базовых станций
+def place_stations(peaks):
+    stations = []
+    for peak in peaks:
+        # Проверка, входит ли хотя бы одна соседняя станция в область покрытия
+        has_neighbor = False
+        for station in stations:
+            distance = np.linalg.norm(np.array(peak) - np.array(station['position']))
+            if distance <= 64:  # Радиус покрытия "Энгель"
+                has_neighbor = True
+                break
+        
+        if has_neighbor:
+            # Используем тип "Купер" если возможно
+            stations.append({'type': 'Купер', 'position': peak})
+        else:
+            # Иначе используем тип "Энгель"
+            stations.append({'type': 'Энгель', 'position': peak})
+    
+    return stations
+
+# Функция для отображения карты и базовых станций
+def display_map(map_data, stations):
+    plt.imshow(map_data, cmap='gray')
+    for station in stations:
+        plt.scatter(station['position'][1], station['position'][0], c='r' if station['type'] == 'Купер' else 'b')
+    plt.show()
+
+# Функция для отображения области покрытия базовых станций
+def display_coverage(map_data, stations):
+    plt.imshow(map_data, cmap='gray')
+    for station in stations:
+        if station['type'] == 'Купер':
+            radius = 32
+            color = 'r'
+        else:
+            radius = 64
+            color = 'b'
+        
+        circle = plt.Circle((station['position'][1], station['position'][0]), radius, edgecolor=color, facecolor='none', lw=2)
+        plt.gca().add_artist(circle)
+    
+    plt.show()
+
+# Функция для отображения информации о базовых станциях
+def display_station_info(stations):
+    kupers = sum(1 for station in stations if station['type'] == 'Купер')
+    engels = len(stations) - kupers
+    
+    print(f"Купер: {kupers} шт.")
+    print(f"Энгель: {engels} шт.")
+    
+    # Примерные затраты
+    kupers_cost = kupers * 10  # Байткоины
+    engels_cost = engels * 20  # Байткоины
+    total_cost = kupers_cost + engels_cost
+    
+    print(f"Общая стоимость: {total_cost} байткоинов")
+
+# Пример использования
+service_url = "http://example.com/tile"  # Замените на реальный URL сервиса
+tiles = collect_tiles(service_url)
+assembled_map = assemble_map(tiles)
+peaks = find_peaks(assembled_map)
+stations = place_stations(peaks)
+
+display_map(assembled_map, stations)
+display_coverage(assembled_map, stations)
+display_station_info(stations)
