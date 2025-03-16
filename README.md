@@ -19,3 +19,5 @@ https://rutube.ru/video/private/7bb259f7268ffab0c64498200f4b43e2/?p=Lz01t1c53d9f
 
 https://olimp.miet.ru/ppo_it/api
 https://olimp.miet.ru/ppo_it/info/docs/case_final
+
+https://cloud.predprof.olimpiada.ru/index.php/s/mcGsPf3zoCaD8CN?path=%2FFridge%20Creators
