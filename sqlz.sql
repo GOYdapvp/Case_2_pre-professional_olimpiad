@@ -1,0 +1,21 @@
+CREATE TABLE tiles (
+    id SERIAL PRIMARY KEY,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    data JSON NOT NULL
+);
+
+CREATE TABLE modules (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL
+);
+
+CREATE TABLE stations (
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(50) NOT NULL,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    cost FLOAT NOT NULL
+);
