@@ -1,25 +1,139 @@
+import requests
+import json
 import numpy as np
-
-def assemble_tiles(tiles):
-    tile_size = 64
-    map_size = 256
-    assembled_map = np.zeros((map_size, map_size), dtype=int)
-
-    # Расположение тайлов в правильном порядке
-    for i, tile in enumerate(tiles):
-        x = i % 4
-        y = i // 4
-        assembled_map[y*tile_size:(y+1)*tile_size, x*tile_size:(x+1)*tile_size] = tile
-
-    return assembled_map
-
-# Пример тайлов (16 тайлов размера 64x64, заполненных случайными значениями для демонстрации)
-tiles = [np.random.randint(0, 256, (64, 64)) for _ in range(16)]
-
-# Собрать тайлы в карту
-assembled_map = assemble_tiles(tiles)
-
-# Визуализация собранной карты
 import matplotlib.pyplot as plt
-plt.imshow(assembled_map, cmap='gray')
-plt.show()
+import sqlite3
+
+class MapAssembler:
+    def __init__(self, service_url):
+        self.service_url = service_url
+        self.tiles = []
+        self.assembled_map = None
+
+    def fetch_and_assemble_tiles(self):
+        while len(self.tiles) < 16:
+            response = requests.get(self.service_url)
+            if response.status_code == 200:
+                tile_data = response.json()['message']['data']
+                tile = np.array(tile_data)
+                self.tiles.append(tile)
+
+        self.assembled_map = np.zeros((256, 256))
+        for i, tile in enumerate(self.tiles):
+            x = i % 4
+            y = i // 4
+            self.assembled_map[y*64:(y+1)*64, x*64:(x+1)*64] = tile
+
+class StationPlacer:
+    def __init__(self, map_data):
+        self.map_data = map_data
+
+    def place_stations(self):
+        stations = []
+        for i in range(self.map_data.shape[0]):
+            for j in range(self.map_data.shape[1]):
+                if self.is_peak(i, j):
+                    stations.append((i, j))
+
+        placed_stations = []
+        for station in stations:
+            if self.can_cover(station, placed_stations):
+                placed_stations.append(station)
+
+        return placed_stations
+
+    def is_peak(self, x, y):
+        # Проверка, является ли точка пиком
+        sum_height = 0
+        count = 0
+        for i in range(-1, 2):
+            for j in range(-1, 2):
+                if i == 0 and j == 0:
+                    continue
+                if 0 <= x + i < self.map_data.shape[0] and 0 <= y + j < self.map_data.shape[1]:
+                    sum_height += self.map_data[x + i, y + j]
+                    count += 1
+        return self.map_data[x, y] > sum_height / count
+
+    def can_cover(self, station, placed_stations):
+        # Проверка, покрывает ли станция хотя бы одну соседнюю станцию
+        for placed_station in placed_stations:
+            if ((station[0] - placed_station[0]) ** 2 + (station[1] - placed_station[1]) ** 2) ** 0.5 < 64:
+                return True
+        return False
+
+class DatabaseManager:
+    def __init__(self, db_name):
+        self.conn = sqlite3.connect(db_name)
+        self.cursor = self.conn.cursor()
+
+    def create_table(self):
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS stations
+            (id INTEGER PRIMARY KEY, x INTEGER, y INTEGER, type TEXT)
+        ''')
+        self.conn.commit()
+
+    def insert_station(self, x, y, type):
+        self.cursor.execute('INSERT INTO stations (x, y, type) VALUES (?, ?, ?)', (x, y, type))
+        self.conn.commit()
+
+def get_coords_and_prices(service_url):
+    response = requests.get(service_url + '/coords')
+    if response.status_code == 200:
+        data = response.json()['message']
+        return data['sender'], data['listener'], data['price']
+    else:
+        return None
+
+def main():
+    service_url = 'https://olimp.miet.ru/ppo_it/api'
+    map_assembler = MapAssembler(service_url)
+    map_assembler.fetch_and_assemble_tiles()
+
+    station_placer = StationPlacer(map_assembler.assembled_map)
+    stations = station_placer.place_stations()
+
+    db_manager = DatabaseManager('stations.db')
+    db_manager.create_table()
+
+    sender, listener, prices = get_coords_and_prices(service_url)
+    if sender and listener and prices:
+        print(f'Sender: {sender}, Listener: {listener}, Prices: {prices}')
+
+        # Размещение станций с учетом покрытия и стоимости
+        for station in stations:
+            # Для простоты, размещаем станции типа "Купер" на каждом втором пике
+            if stations.index(station) % 2 == 0:
+                db_manager.insert_station(station[0], station[1], 'Купер')
+            else:
+                db_manager.insert_station(station[0], station[1], 'Энгель')
+
+        # Визуализация карты и станций
+        plt.imshow(map_assembler.assembled_map, cmap='gray')
+        for station in stations:
+            if stations.index(station) % 2 == 0:
+                plt.scatter(station[1], station[0], color='blue', marker='o')  # Купер
+            else:
+                plt.scatter(station[1], station[0], color='red', marker='o')  # Энгель
+
+        # Визуализация области покрытия
+        for station in stations:
+            if stations.index(station) % 2 == 0:
+                circle = plt.Circle((station[1], station[0]), 32, color='blue', alpha=0.2)
+            else:
+                circle = plt.Circle((station[1], station[0]), 64, color='red', alpha=0.2)
+            plt.gca().add_artist(circle)
+
+        plt.show()
+
+        # Отображение количества используемых станций и затрат
+        count_kuper = len(stations) // 2
+        count_engel = len(stations) // 4
+        costs = count_kuper * prices[0] + count_engel * prices[1]
+        print(f'Используется станций типа "Купер": {count_kuper}\n'
+              f'Используется станций типа "Энгель": {count_engel}\n'
+              f'Затраты: {costs} байткоинов')
+
+if __name__ == '__main__':
+    main()
