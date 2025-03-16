@@ -49,17 +49,6 @@ peaks = find_peaks(map_data)
 stations = place_stations(peaks)
 
 plt.imshow(map_data, cmap='gray')
-"""for station in stations:
-    if station['type'] == 'Купер':
-        plt.plot(station['location'][1], station['location'][0], 'bs')
-    else:
-        plt.plot(station['location'][1], station['location'][0], 'g^')"""
-
-plt.savefig("foo.jpg")
-
-
-map_data = np.random.rand(256, 256) * 255
-plt.imshow(map_data, cmap='gray')
 
 colors = {'Купер': 'blue', 'Энгель': 'red'}
 
@@ -76,6 +65,8 @@ for station in stations:
     
     circle = plt.Circle((y, x), radius, edgecolor=color, facecolor=color, alpha=0.2)
     plt.gca().add_artist(circle)
+
+plt.savefig("foo.jpg")
 
 class Application(tk.Frame):
     def __init__(self, master=None):
@@ -115,13 +106,11 @@ class Application(tk.Frame):
         peaks = find_peaks(map_data)
         stations = place_stations(peaks)
         plt.imshow(map_data, cmap='gray')
+        colors = {'Купер': 'blue', 'Энгель': 'red'}
+        
         for station in stations:
-            if station['type'] == 'Купер':
-                plt.plot(station['location'][1], station['location'][0], 'bo')
-            else:
-                plt.plot(station['location'][1], station['location'][0], 'ro')
-        plt.show()
+            x, y = station['location']
+            color = colors[station['type']]
 
-root = tk.Tk()
-app = Application(master=root)
-app.mainloop()
+            plt.plot(y, x, marker='o', markersize=5, color=color)
+
