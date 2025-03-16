@@ -44,7 +44,7 @@ def place_stations(peaks):
     return stations
 
 # Пример использования
-url = 'http://example.com/tile'
+url = 'https://olimp.miet.ru/ppo_it/api'
 map_data = assemble_map(url)
 peaks = find_peaks(map_data)
 stations = place_stations(peaks)
