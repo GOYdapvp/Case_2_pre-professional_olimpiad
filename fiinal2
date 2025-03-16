@@ -4,10 +4,6 @@ import requests
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Стоимость каждой станции в байткоинах
-cost_kuper = 100
-cost_engel = 50
-
 def get_tile(url):
     response = requests.get(url)
     return response.json()['message']['data']
@@ -49,7 +45,18 @@ def place_stations(peaks):
     
     return stations
 
-def calculate_cost(stations):
+def get_station_costs(url):
+    try:
+        response = requests.get(url)
+        data = response.json()
+        cost_kuper = data.get('cost_kuper', 100)  # По умолчанию 100 байткоинов
+        cost_engel = data.get('cost_engel', 50)   # По умолчанию 50 байткоинов
+        return cost_kuper, cost_engel
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось получить стоимость станций: {e}")
+        return 100, 50  # Возвращаем значения по умолчанию
+
+def calculate_cost(stations, cost_kuper, cost_engel):
     total_cost = 0
     kuper_count = 0
     engel_count = 0
@@ -62,12 +69,6 @@ def calculate_cost(stations):
             engel_count += 1
     return kuper_count, engel_count, total_cost
 
-# Пример использования
-url = 'https://olimp.miet.ru/ppo_it/api'
-map_data = assemble_map(url)
-peaks = find_peaks(map_data)
-stations = place_stations(peaks)
-
 class Application(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
@@ -76,12 +77,19 @@ class Application(tk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        self.url_label = tk.Label(self)
-        self.url_label["text"] = "URL сервиса:"
-        self.url_label.pack(side="top")
+        self.map_url_label = tk.Label(self)
+        self.map_url_label["text"] = "URL карты:"
+        self.map_url_label.pack(side="top")
 
-        self.url_entry = tk.Entry(self)
-        self.url_entry.pack(side="top")
+        self.map_url_entry = tk.Entry(self)
+        self.map_url_entry.pack(side="top")
+
+        self.cost_url_label = tk.Label(self)
+        self.cost_url_label["text"] = "URL стоимости станций:"
+        self.cost_url_label.pack(side="top")
+
+        self.cost_url_entry = tk.Entry(self)
+        self.cost_url_entry.pack(side="top")
 
         self.assemble_button = tk.Button(self)
         self.assemble_button["text"] = "Собрать карту"
@@ -98,19 +106,23 @@ class Application(tk.Frame):
         self.quit.pack(side="bottom")
 
     def assemble_map(self):
-        url = self.url_entry.get()
+        url = self.map_url_entry.get()
         # Собрать карту и отобразить ее
         map_data = assemble_map(url)
         plt.imshow(map_data, cmap='gray')
         plt.show()
 
     def show_stations(self):
-        url = self.url_entry.get()
-        map_data = assemble_map(url)
+        map_url = self.map_url_entry.get()
+        cost_url = self.cost_url_entry.get()
+        
+        map_data = assemble_map(map_url)
         peaks = find_peaks(map_data)
         stations = place_stations(peaks)
         
-        kuper_count, engel_count, total_cost = calculate_cost(stations)
+        cost_kuper, cost_engel = get_station_costs(cost_url)
+        
+        kuper_count, engel_count, total_cost = calculate_cost(stations, cost_kuper, cost_engel)
         
         # Отобразить базовые станции на карте
         plt.imshow(map_data, cmap='gray')
@@ -130,3 +142,4 @@ class Application(tk.Frame):
 root = tk.Tk()
 app = Application(master=root)
 app.mainloop()
+
