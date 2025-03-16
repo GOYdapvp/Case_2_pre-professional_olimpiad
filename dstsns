@@ -1,0 +1,35 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Пример данных для станций
+stations = [
+    {'type': 'Купер', 'location': (100, 100)},
+    {'type': 'Энгель', 'location': (150, 150)},
+    {'type': 'Купер', 'location': (200, 200)},
+]
+
+# Отображение карты (замените на свою карту)
+map_data = np.random.rand(256, 256) * 255
+plt.imshow(map_data, cmap='gray')
+
+# Цвета для станций
+colors = {'Купер': 'blue', 'Энгель': 'red'}
+
+# Отображение станций и их областей покрытия
+for station in stations:
+    x, y = station['location']
+    color = colors[station['type']]
+    
+    # Отображение станции
+    plt.plot(y, x, marker='o', markersize=5, color=color)
+    
+    # Отображение области покрытия
+    if station['type'] == 'Купер':
+        radius = 32
+    else:
+        radius = 63
+    
+    circle = plt.Circle((y, x), radius, edgecolor=color, facecolor=color, alpha=0.2)
+    plt.gca().add_artist(circle)
+
+plt.show()
