@@ -17,6 +17,24 @@ def collect_tiles(service_url):
         tiles[tile_id] = tile
     return tiles
 
+
+# Функция для получения одного тайла от сервиса
+def get_tile(service_url):
+    response = requests.get(service_url)
+    data = response.json()
+    return data['data']
+
+# Функция для сбора всех тайлов
+def collect_tiles(service_url):
+    tiles = {}
+    while len(tiles) < 16:
+        tile = get_tile(service_url)
+        # Для упрощения предположим, что каждый тайл имеет уникальный идентификатор,
+        # который можно получить из ответа API. В реальности это может быть более сложно.
+        tile_id = hash(tuple(map(tuple, tile)))  # Простой способ идентификации
+        tiles[tile_id] = tile
+    return tiles
+
 # Функция для сборки полной карты
 def assemble_map(tiles):
     # Для упрощения предположим, что тайлы можно расположить в сетке 4x4
@@ -27,13 +45,20 @@ def assemble_map(tiles):
     tile_ids = list(tiles.keys())
     
     # Расположение тайлов в сетке
+    index = 0
     for i in range(4):
         for j in range(4):
-            tile_id = tile_ids[i*4 + j]
+            tile_id = tile_ids[index]
             tile = tiles[tile_id]
             assembled_map[i*tile_size:(i+1)*tile_size, j*tile_size:(j+1)*tile_size] = tile
+            index += 1
     
     return assembled_map
+
+# Функция для отображения карты
+def display_map(map_data):
+    plt.imshow(map_data, cmap='gray')
+    plt.show()
 
 # Функция для поиска пиков возвышенностей
 from scipy.ndimage import maximum_filter
@@ -65,7 +90,7 @@ def place_stations(peaks):
     return stations
 
 # Функция для отображения карты и базовых станций
-def display_map(map_data, stations):
+def display_map_st(map_data, stations):
     plt.imshow(map_data, cmap='gray')
     for station in stations:
         plt.scatter(station['position'][1], station['position'][0], c='r' if station['type'] == 'Купер' else 'b')
@@ -110,5 +135,6 @@ peaks = find_peaks(assembled_map)
 stations = place_stations(peaks)
 
 display_map(assembled_map, stations)
+display_map_st(assembled_map, stations)
 display_coverage(assembled_map, stations)
 display_station_info(stations)
